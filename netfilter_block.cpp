@@ -3,14 +3,94 @@
 #include <unistd.h>
 #include <netinet/in.h>
 #include <linux/types.h>
-#include <linux/netfilter.h>		/* for NF_ACCEPT */
 #include <errno.h>
+#include <stdint.h>
 
+#include <linux/netfilter.h>		/* for NF_ACCEPT */
 #include <libnetfilter_queue/libnetfilter_queue.h>
+
+#define max(a,b) (a > b ? a : b) 
+#define min(a,b) (a < b ? a : b) 
+
+uint32_t pow(uint32_t a, uint32_t n){ // return a^n
+	uint32_t result = 1;
+	while(n--){
+		result *= a;
+	}
+	return result;
+}
 
 void usage() {
     printf("syntax: netfilter_block <host>\n");
     printf("sample: netfilter_block test.gilgil.net\n");
+}
+
+void print_mac(u_char * mac){
+	for(int i = 0; i < 6; i++){
+		printf("%02x", *(mac+i));
+		if(i == 5) break;
+		printf(":");
+	}
+	printf("\n");
+}
+void print_ip(u_char * ip){
+	for(int i = 0; i < 4; i++){
+		printf("%d", *(ip+i));
+		if(i == 3) break;
+		printf(".");
+	}
+	printf("\n");
+}
+
+uint16_t ethernet_protocol_type;
+uint8_t ipv4_protocol_id;
+
+// Layer 7
+void Data_print(u_char * packet, uint32_t start, uint32_t max_size){
+	uint32_t end = start + 32;
+	end = min(end, max_size);
+	Data_check(start, end);
+	printf("\n");
+}
+
+// Layer 4
+uint32_t TCP_print(u_char * packet, uint32_t start){
+	uint32_t tcp_start = start;
+
+	uint32_t tcp_src_port_start = tcp_start, tcp_src_port_end = tcp_start + 1;
+	uint16_t tcp_src_port_num = packet[tcp_src_port_start] * 256 + packet[tcp_src_port_end];
+	printf("(TCP) Source port: %d\n", tcp_src_port_num);
+
+	uint32_t tcp_dst_port_start = tcp_src_port_end + 1, tcp_dst_port_end = tcp_dst_port_start + 1;
+	uint16_t tcp_dst_port_num = packet[tcp_dst_port_start] * 256 + packet[tcp_dst_port_end];
+	printf("(TCP) Destination port: %d\n", tcp_dst_port_num);
+
+	uint32_t tcp_header_length = (packet[tcp_start + 12] & 0xf0) >> 2;
+	printf("(TCP) Header Length: %d bytes\n", tcp_header_length);
+
+	return tcp_start + tcp_header_length;
+}
+
+// Layer 3
+uint32_t IPv4_print(u_char * packet, uint32_t start){
+	uint32_t ipv4_start = start;
+
+	uint32_t ipv4_header_length = (packet[ipv4_start] & 0x0f) * 4;
+	printf("(IPv4) Header Length: %d bytes\n", ipv4_header_length);
+
+	uint32_t ipv4_protocol_ID = packet[ipv4_start + 9];
+	ipv4_protocol_id = ipv4_protocol_ID;
+	printf("(IPv4) Protocol ID %d\n", ipv4_protocol_ID);
+
+	printf("(IPv4) IP source address ");
+	uint32_t ipv4_src_addr_start = ipv4_start + 12;
+	print_ip(packet + ipv4_src_addr_start);
+
+	printf("(IPv4) IP destination address ");
+	uint32_t ipv4_dst_addr_start = ipv4_start + 16;
+	print_ip(packet + ipv4_dst_addr_start);
+
+	return ipv4_start + ipv4_header_length;
 }
 
 bool now_packet_accept = true;
@@ -18,10 +98,20 @@ void dump(unsigned char* buf, int size) {
 	// packet which includes host_name must be dropped (by now_packet_accept)
 	int i;
 	for (i = 0; i < size; i++) {
-		if (i % 16 == 0)
-			printf("\n");
+		if (i % 16 == 0) printf("\n");
 		printf("%02x ", buf[i]);
 	}
+	printf("\n\n");
+
+	uint32_t ipv4_header_end = 0;
+	uint32_t tcp_header_end = 0;
+
+    ipv4_header_end = IPv4_print(buf, 0);
+    if(ipv4_protocol_id == 0x6){ // IPv4 -> TCP
+    	tcp_header_end = TCP_print(buf, ipv4_header_end);
+    }
+    Data_print(buf, max(ipv4_header_end, tcp_header_end), size);
+    printf("\n");
 }
 
 /* returns packet id */
