@@ -46,10 +46,16 @@ uint16_t ethernet_protocol_type;
 uint8_t ipv4_protocol_id;
 
 // Layer 7
+void Data_check(u_char * packet, uint32_t start, uint32_t end){
+	if(start >= end) return;
+	
+	
+}
+
 void Data_print(u_char * packet, uint32_t start, uint32_t max_size){
 	uint32_t end = start + 32;
 	end = min(end, max_size);
-	Data_check(start, end);
+	Data_check(packet, start, end);
 	printf("\n");
 }
 
