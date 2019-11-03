@@ -1,7 +1,7 @@
-all: nfqnl_practice
+all: netfilter_block
 
-nfqnl_practice: nfqnl_practice.c
-	gcc -o nfqnl_practice nfqnl_practice.c -lnetfilter_queue
+netfilter_block: netfilter_block.c
+	gcc -o netfilter_block netfilter_block.c -lnetfilter_queue
 
 clean:
-	rm -f nfqnl_practice *.o
+	rm -f netfilter_block *.o
