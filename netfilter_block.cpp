@@ -42,17 +42,24 @@ bool Data_checking(u_char * packet, uint32_t start, uint32_t end){
 	strncmp((const char *)(packet + start), "PUT", 3) == 0 ||
 	strncmp((const char *)(packet + start), "DELETE", 6) == 0 ||
 	strncmp((const char *)(packet + start), "OPTIONS", 7) == 0) {
-		
 		// \x0d \x0a -> end of string
 		const char * ptr = strstr((const char *)(packet + start), "Host:");
 		if(ptr != NULL){
-			if(strncmp((const char *)(ptr + 6), host_name, host_name_len) == 0){
+			char save_string[101] = "";
+			for(int i = 6;; i++){
+				if(strncmp((ptr + i), "\x0d", 1) == 0) break;
+				strncat(save_string, (ptr + i), 1);
+			}
+			printf("[Work] Packet Hostname: %s\n", save_string);
+			int cmp_len = strlen(save_string);
+
+			if(strncmp((const char *)save_string, host_name, max(host_name_len, cmp_len)) == 0){
 				printf("[Success] Correct HostName\n");
 				return false;
 			}
 			else printf("[Work] Different HostName\n");
 		}
-		else printf("[Error] No HostName..\n");
+		else printf("[Work] No HostName..\n");
 	}
 	return true;
 }
