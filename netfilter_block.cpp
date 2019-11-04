@@ -5,7 +5,7 @@
 #include <linux/types.h>
 #include <errno.h>
 #include <stdint.h>
-#include <string>
+#include <string.h>
 
 #include <linux/netfilter.h>		/* for NF_ACCEPT */
 #include <libnetfilter_queue/libnetfilter_queue.h>
@@ -28,18 +28,38 @@ void usage() {
     printf("sample: netfilter_block test.gilgil.net\n");
 }
 
+char * host_name;
+int host_name_len;
+bool now_packet_accept = true;
+
 // Layer 7
-void Data_checking(u_char * packet, uint32_t start, uint32_t end){
-	if(start >= end) return;
-	string HTTP_method[6] = {"GET", "POST", "HEAD", "PUT", "DELETE", "OPTIONS"};
-	for(int i = 0; i < 6; i++){
+bool Data_checking(u_char * packet, uint32_t start, uint32_t end){
+	if(start >= end) return true;
+
+	if(strncmp((const char *)(packet + start), "GET", 3) == 0 ||
+	strncmp((const char *)(packet + start), "POST", 4) == 0 ||
+	strncmp((const char *)(packet + start), "HEAD", 4) == 0 ||
+	strncmp((const char *)(packet + start), "PUT", 3) == 0 ||
+	strncmp((const char *)(packet + start), "DELETE", 6) == 0 ||
+	strncmp((const char *)(packet + start), "OPTIONS", 7) == 0) {
 		
+		// \x0d \x0a -> end of string
+		const char * ptr = strstr((const char *)(packet + start), "Host:");
+		if(ptr != NULL){
+			if(strncmp((const char *)(ptr + 6), host_name, host_name_len) == 0){
+				printf("[Success] Correct HostName\n");
+				return false;
+			}
+			else printf("[Work] Different HostName\n");
+		}
+		else printf("[Error] No HostName..\n");
 	}
+	return true;
 }
 void Data_check(u_char * packet, uint32_t start, uint32_t max_size){
 	uint32_t end = start + 32;
 	end = min(end, max_size);
-	Data_checking(packet, start, end);
+	now_packet_accept = Data_checking(packet, start, end); // false means find input hostname
 	printf("\n");
 }
 
@@ -59,7 +79,6 @@ uint32_t IPv4_check(u_char * packet, uint32_t start){
 	return ipv4_start + ipv4_header_length;
 }
 
-bool now_packet_accept = true;
 void dump(unsigned char* buf, int size) {
 	// packet which includes host_name must be dropped (by now_packet_accept)
 	int i;
@@ -159,7 +178,9 @@ int main(int argc, char **argv)
         usage();
         return -1;
     }
-	char * host_name = argv[1];
+
+	host_name = argv[1];
+	host_name_len = strlen(host_name);
 
 	printf("opening library handle\n");
 	h = nfq_open();
